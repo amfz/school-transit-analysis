@@ -1,0 +1,8 @@
+*.pbf
+*.zip
+*.xml
+*.qgs*
+*.qgz
+*.pyc
+Graph.obj
+config.ini
