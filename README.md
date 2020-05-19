@@ -1,4 +1,6 @@
-# 4mativ-proj1
+# School Transit Analysis
+
+**NOTE: This is the public-facing version of a private repository. Files may be missing, and code may not be up-to-date with the private repo.**
 
 ## Requirements
 ### Software
