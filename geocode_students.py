@@ -3,9 +3,9 @@ import pandas as pd
 import requests
 
 # change these as needed before running the script
-school = 'El Paso Leadership Academy'
-student_address_path = 'inputs/elpaso/student_addresses.xlsx'
-out_path = 'inputs/elpaso/geocoded_students.csv'
+school = ''
+student_address_path = ''
+out_path = ''
 
 g_api = 'https://maps.googleapis.com/maps/api/geocode/json'
 config = configparser.ConfigParser()
@@ -24,7 +24,6 @@ def consolidate_addresses(df):
                         + df['P State']
                         + ' '
                         + df['P Zip'])
-    print(df.head())
     return df
 
 
