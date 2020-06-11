@@ -1,6 +1,6 @@
 # School Transit Analysis
 
-**NOTE: This is the public-facing version of a private repository. Files may be missing, and code may not be up-to-date with the private repo.**
+**NOTE: This is the public-facing version of a private repository. Files are missing, and code may not be up-to-date with the private repo.**
 
 ## Requirements
 ### Software
@@ -22,7 +22,5 @@
   (nwr(area.boundaryarea););
   out;
   ```
-  
-  ### Visualizations
-  * **Heat Maps** guide to displaying point vector data as heat map from https://www.qgistutorials.com/en/docs/3/creating_heatmaps.html
+   * Alternatively, consider using `osmnx` 
  
