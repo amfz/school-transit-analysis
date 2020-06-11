@@ -3,9 +3,9 @@ import pandas as pd
 import requests
 
 # change these as needed before running the script
-school = ''
-student_address_path = ''
-out_path = ''
+school = ''  # yes prep schools already have campus info
+student_address_path = 'inputs/houston/yellowstone_schools/student_addresses.xlsx'
+out_path = 'inputs/houston/yellowstone_schools/geocoded_students.csv'
 
 g_api = 'https://maps.googleapis.com/maps/api/geocode/json'
 config = configparser.ConfigParser()
@@ -24,6 +24,7 @@ def consolidate_addresses(df):
                         + df['P State']
                         + ' '
                         + df['P Zip'])
+    print(df.head())
     return df
 
 
@@ -52,11 +53,10 @@ def batch_geocode(df):
 
 
 def main():
-    data = pd.read_excel(student_address_path,
-                         dtype={'P Zip': str})
-    data = consolidate_addresses(data)
+    data = pd.read_excel(student_address_path)
+    #data = consolidate_addresses(data)
     data = batch_geocode(data)
-    data['school'] = school
+    #data['school'] = school
     data.to_csv(out_path, index=False)
     print('done')
 

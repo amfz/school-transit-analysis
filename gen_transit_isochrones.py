@@ -3,12 +3,14 @@ import os
 import requests
 import pandas as pd
 
+school_list = 'outputs/geocoded_schools.csv'
+
+# variables to run single process
 school = '31.7704619,-106.4687935'
 city = 'elpaso'
 triptime = '3:30pm'
 ampm = triptime[-2:]
 file_name = 'outputs/{}/isos_{}_may12.geojson'.format(city, triptime.replace(':', ''))
-school_list = 'outputs/geocoded_schools.csv'
 
 
 def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90], 
@@ -46,7 +48,7 @@ def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90],
         'date': '05-12-2020',
         'time': triptime,
         'cutoffSec': cutoffs,
-        'clampInitialWait': 0,
+        'clampInitialWait': 900,
         'maxTransfers': 1
     }
     if ampm == 'am':
@@ -83,12 +85,17 @@ def batch_process(city='houston'):
         am_time = row['am_latest_arr'].replace(' ', '').lower()
         pm_time = row['pm_earliest_dep'].replace(' ', '').lower()
 
+        # adjust am time by 5 minutes
+        #am_min = row['am_earliest_arr'][2:4]
+        #am_replacement_min = str(int(am_min) + 10).rjust(2, '0')
+        #am_time = am_time.replace(am_min, am_replacement_min)
+
         # format output paths
-        am_out_file = '''outputs/{}/{}/isos_{}_may12.geojson'''.format(city, 
+        am_out_file = '''outputs/{}/{}/isos_{}_may12_15minclamp.geojson'''.format(city, 
                                                                 school_name, 
                                                                 am_time.replace(':', ''))
         
-        pm_out_file = '''outputs/{}/{}/isos_{}_may12.geojson'''.format(city, 
+        pm_out_file = '''outputs/{}/{}/isos_{}_may12_15minclamp.geojson'''.format(city, 
                                                                 school_name, 
                                                                 pm_time.replace(':', ''))
         
@@ -98,6 +105,9 @@ def batch_process(city='houston'):
                        triptime=am_time, 
                        ampm='am',
                        test_mode=False)
+        am['name'] = 'AM Isochrones'
+        for f in am['features']:
+            f['properties']['time'] = f['properties']['time']/60
         with open(am_out_file, 'w') as am_out:
             json.dump(am, am_out)
 
@@ -107,6 +117,9 @@ def batch_process(city='houston'):
                        triptime=pm_time, 
                        ampm='pm',
                        test_mode=False)
+        pm['name'] = 'PM Isochrones'
+        for f in pm['features']:
+            f['properties']['time'] = f['properties']['time']/60
         with open(pm_out_file, 'w') as pm_out:
             json.dump(pm, pm_out)
 

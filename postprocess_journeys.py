@@ -2,8 +2,15 @@ import json
 import pandas
 import polyline
 
-trip_path = 'inputs/elpaso/pm_journeys.json'
-elp_out = 'outputs/elpaso/pm_journeys_redo.geojson'
+# school/time variables -- change before running
+school = 'southeast'
+ampm = 'am'
+
+# path templates
+trip_path = 'inputs/houston/{}/{}_journeys.json'.format(school, ampm)
+geojson_out_path = 'outputs/houston/{}/{}_journeys.geojson'.format(school, ampm)
+json_out_path = 'outputs/houston/{}/{}_journey_attributes.json'.format(school, ampm)
+
 
 def load_data(file_path):
     """
@@ -18,14 +25,6 @@ def load_data(file_path):
     with open(file_path, 'r') as f:
         data = json.load(f)
     return data
-
-
-def extract_geocoded_data(result):
-   """
-   placeholder to extract lat/lon for student addresses, 
-   eliminating the need for geocoding beforehand
-   """ 
-   pass
 
 
 def extract_overview_line(result):
@@ -45,7 +44,7 @@ def extract_overview_line(result):
 
 def extract_leg_attributes(leg):
     """
-    Get itinerary attributes (origin, destination, start and end time, 
+    Get basic itinerary attributes (origin, destination, start and end time, 
     trip duration) from a Google Directions API result leg.
 
     Walking-only routes do not have departure and arrival times -- those
@@ -70,20 +69,26 @@ def extract_leg_attributes(leg):
                   'arrival_time': arr_time,
                   'total_minutes': duration_minutes,
                   'total_miles': dist_miles,
-                  'notes': []}
+                  'notes': ''}
     return attributes
 
 
 def extract_aggregate_step_attributes(steps):
     """
+    Get further itinerary attributes (walk time, transit time, 
+    number of transfers, specific routes taken) from a Google Directions API result leg.
+
     Args:
         steps (list): the list of steps in a Google Directions API leg.
                       e.g. in `result['routes'][0]['legs'][0]['steps']`
+
+    Returns:
+        dict: dictionary of itinerary attributes
     """
     
     total_walking_time = 0
     total_walking_dist = 0
-
+    #transit-specific attributes
     total_transit_time = 0
     transit_routes = []
     starting_stop = None
@@ -95,12 +100,12 @@ def extract_aggregate_step_attributes(steps):
             if starting_stop is None:
                 starting_stop = transit_details['departure_stop']['name']
             end_stop = transit_details['arrival_stop']['name']
-            line = transit_details['line']['short_name']
+            line = transit_details.get('line', {}).get('short_name', transit_details['line']['name'])
             total_transit_time += step['duration']['value']
             transit_routes.append(line)
         elif step['travel_mode'] == 'WALKING':
             total_walking_time += step['duration']['value']
-            total_walking_dist += step['duration']['value']
+            total_walking_dist += step['distance']['value']
     
     # calculate the number of transfers
     if len(transit_routes) > 0:
@@ -114,7 +119,7 @@ def extract_aggregate_step_attributes(steps):
                       'num_transfers': num_transfers,
                       'starting_stop': starting_stop,
                       'end_stop': end_stop,
-                      'routes_taken': transit_routes
+                      'routes_taken': ', '.join(transit_routes)
                      }
     return agg_attributes
 
@@ -128,7 +133,7 @@ def make_feature(result):
         result (dict): a single Google Directions API response.
     
     Returns:
-        dict: A geojson-formatted feature.
+        dict: A single geojson-formatted feature.
     """
     obj = {'type': 'Feature'}
     if len(result['routes']) > 0:
@@ -182,14 +187,16 @@ def gen_geojson(data):
 def write_geojson(geojson, out_path):
     """
     Write the geojson dict to file.
+
+    Args:
+        geojson (dict): The geoJSON-formatted dictionary to write to file.
     """
     with open(out_path, 'w') as outfile:
         json.dump(geojson, outfile)    
     print('Wrote to {}'.format(out_path))
-    return
 
 
-def convert_to_geojson(json_file, out_path):
+def convert_to_geojson(json_file, geo_out_path):
     """
     Load a JSON of Google Directions API results,
     convert it to a geojson, and write it to file.
@@ -197,8 +204,34 @@ def convert_to_geojson(json_file, out_path):
     data = load_data(json_file)
     print(len(data))
     geoj = gen_geojson(data)
-    write_geojson(geoj, out_path)
-    return geoj
+
+    # add any notes
+    for f in geoj['features']:
+        dep_time = f.get('properties', {}).get('departure_time', '')
+        if 'am' in geo_out_path and 'pm' in str(dep_time):
+            f['properties']['notes'].append('PM Departure')
+    write_geojson(geoj, geo_out_path)
 
 
-convert_to_geojson(trip_path, elp_out)
+def gen_json(json_file, out_path, write_file=True):
+    """
+    Given a json file of Directions API results, 
+    produce a json dataset for analysis, and write it to file.
+    """
+    data = load_data(json_file)
+    geoj = gen_geojson(data)
+    j = []
+    for f in geoj['features']:
+        j.append(f['properties'])
+        dep_time = f.get('properties', {}).get('departure_time', '')
+        if 'am' in out_path and 'pm' in str(dep_time):
+            f['properties']['notes'].append('PM Departure')
+
+    if write_file:
+        with open(out_path, 'w') as outfile:
+            json.dump(j, outfile)
+            print('Wrote to {}'.format(out_path))
+    return j
+
+convert_to_geojson(trip_path, geojson_out_path)
+gen_json(trip_path, json_out_path)
