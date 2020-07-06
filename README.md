@@ -9,15 +9,15 @@ Code was written in Python 3.6.8 with the following libraries:
 ```
 configparser
 datetime
-dateutil
-geopandas
+dateutil 2.6.1
+geopandas 0.6.1
 json
 os
 osgeo
-pandas
-polyline
+pandas 1.0.3
+polyline 1.4.0
 re
-requests
+requests 2.23.0
 time
 ```
 
