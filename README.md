@@ -4,6 +4,23 @@
 
 ## Requirements
 ### Software
+#### Python
+Code was written in Python 3.6.8 with the following libraries:
+```
+configparser
+datetime
+dateutil
+geopandas
+json
+os
+osgeo
+pandas
+polyline
+re
+requests
+time
+```
+
 #### OpenTripPlanner
 * http://docs.opentripplanner.org/en/latest/: This project uses OTP v 1.4.0, available at https://repo1.maven.org/maven2/org/opentripplanner/otp/1.4.0/
 * Resources
