@@ -7,18 +7,18 @@ import convert_times
 from datetime import datetime
 
 # variables
-school = 'southeast'
+school = '498_new_horizon_oci_l_wood_ps'
 ampm = 'am'
 
 # path templates
-od_path = 'inputs/houston/{}/od_df.csv'.format(school)
-out_path = 'inputs/houston/{}/{}_journeys_demo.json'.format(school, ampm)
+od_path = 'temp/indy/{}_od_df.csv'.format(school)
+out_path = 'temp/indy/{}_{}_journeys.json'.format(school, ampm)
 
 # API variables
 dir_api = 'https://maps.googleapis.com/maps/api/directions/json'
 config = configparser.ConfigParser()
 config.read('config.ini')
-GKEY = config['auth']['gkey']
+gkey = config['auth']['gkey2']
 
 
 def format_params(record, ampm):
@@ -33,27 +33,27 @@ def format_params(record, ampm):
         dict: Dictionary of parameters needed for the Google Directions API
     """
     # basic parameters
-    params = {'key': GKEY,
+    params = {'key': gkey,
               'mode': 'transit',
               'units': 'imperial'}
 
     if ampm=='am':
         # add origin, destination, arrival time for AM
-        params['origin'] = '{}'.format(record.home_address)
-        params['destination'] = '{}'.format(record.school_address)
+        params['origin'] = '{}'.format(record['home_address'])
+        params['destination'] = '{}'.format(record['school_address'])
         
         # format the arrival time to be school session time next Weds
-        arr_text = record.am_latest_arr + ' ' + record.tz
+        arr_text = record['am_latest_arr'] + ' ' + record['tz']
         arr_timestamp = convert_times.create_timestamp(arr_text)                                           
         params['arrival_time'] = arr_timestamp
 
     elif ampm=='pm':
         # add origin, destination, departure time for PM
-        params['origin'] = '{}'.format(record.school_address)
-        params['destination'] = '{}'.format(record.home_address)
+        params['origin'] = '{}'.format(record['school_address'])
+        params['destination'] = '{}'.format(record['home_address'])
 
         # format departure time to be school end bell next Weds
-        dep_text = record.pm_earliest_dep + ' ' + record.tz
+        dep_text = record['pm_earliest_dep'] + ' ' + record['tz']
         dep_timestamp = convert_times.create_timestamp(dep_text)
         params['departure_time'] = dep_timestamp
 
@@ -71,16 +71,16 @@ def query_dir_api(params):
         dict: JSON-formatted response, if successful.
               If the API call failed, dict will contain status code and params.
     """
-    data = None
     r = requests.get(dir_api, params=params)
     time.sleep(.05)
     if r.status_code == 200:
         data = r.json()
     else:
-        data['error'] = r.status_code
+        data = {}
+        data['status'] = r.status_code
         data['params'] = params
         print(r.status_code)
-        time.sleep(1)
+        time.sleep(60)
     return data
 
 
@@ -90,7 +90,7 @@ def batch_process(df, ampm):
         print(idx)
         params = format_params(row, ampm)
         response = query_dir_api(params)
-        if response.get('status') != 'OK':
+        if response.get('status') != 'OK' and response.get('status') is not None:
             response['geocoded_waypoints'][0]['address'] = params['origin']
             response['geocoded_waypoints'][1]['address'] = params['destination']
         all_journeys.append(response)
@@ -99,7 +99,6 @@ def batch_process(df, ampm):
 
 def main():
     od = pd.read_csv(od_path)
-    od = od.head(2)
     full_results = batch_process(od, ampm)
 
     with open(out_path, 'w') as out:

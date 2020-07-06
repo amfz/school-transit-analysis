@@ -1,15 +1,16 @@
 import json
-import pandas
+import pandas as pd
 import polyline
 
 # school/time variables -- change before running
-school = 'southeast'
-ampm = 'am'
+school = ''  # see schools list in main()
+ampm = 'pm'
 
-# path templates
-trip_path = 'inputs/houston/{}/{}_journeys.json'.format(school, ampm)
-geojson_out_path = 'outputs/houston/{}/{}_journeys.geojson'.format(school, ampm)
-json_out_path = 'outputs/houston/{}/{}_journey_attributes.json'.format(school, ampm)
+# path templates -- commented out because these are now generated in main()
+#trip_path = 'temp/indy/{}_{}_journeys.json'.format(school, ampm)
+#geojson_out_path = 'outputs/indy/{}_{}_journeys.geojson'.format(school, ampm)
+#json_out_path = 'outputs/indy/{}_{}_journey_attributes.json'.format(school, ampm)
+#csv_out_path = 'outputs/indy/{}_{}_journey_attributes.csv'.format(school, ampm)
 
 
 def load_data(file_path):
@@ -57,14 +58,22 @@ def extract_leg_attributes(leg):
         dict: a dictionary of itinerary attributes.
     """
     start_address = leg['start_address']
+    start_lat = leg['start_location']['lat']
+    start_lon = leg['start_location']['lng']
     end_address = leg['end_address']
+    end_lat = leg['end_location']['lat']
+    end_lon = leg['end_location']['lng']
     # account for walking-only routes not having departure and arrival times
     dep_time = leg.get('departure_time', {}).get('text')
     arr_time = leg.get('arrival_time', {}).get('text')
     duration_minutes = round(leg['duration']['value'] / 60, 1)
     dist_miles = round(leg['distance']['value'] * 0.00062137, 2)
     attributes = {'origin': start_address,
+                  'origin_lat': start_lat,
+                  'origin_lon': start_lon,
                   'dest': end_address,
+                  'dest_lat': end_lat,
+                  'dest_lon': end_lon,
                   'departure_time': dep_time,
                   'arrival_time': arr_time,
                   'total_minutes': duration_minutes,
@@ -124,6 +133,20 @@ def extract_aggregate_step_attributes(steps):
     return agg_attributes
 
 
+def extract_properties(result):
+    if len(result['routes']) > 0:
+        leg = result['routes'][0]['legs'][0]
+        properties = extract_leg_attributes(leg)
+        agg_details = extract_aggregate_step_attributes(leg['steps'])
+        properties.update(agg_details)
+    else:
+        waypts = result['geocoded_waypoints']      
+        properties = {'notes': result['status'],
+                      'origin': waypts[0].get('address'),
+                      'dest': waypts[1].get('address')}
+    return properties
+
+
 def make_feature(result):
     """
     Convert a Google Directions API result into a geojson feature, 
@@ -137,21 +160,13 @@ def make_feature(result):
     """
     obj = {'type': 'Feature'}
     if len(result['routes']) > 0:
-        leg = result['routes'][0]['legs'][0]
-        details = extract_leg_attributes(leg)
-        agg_details = extract_aggregate_step_attributes(leg['steps'])
-        details.update(agg_details)
-        obj['properties'] = details
         geom = extract_overview_line(result)
         obj['geometry'] = {'type': 'LineString',
                            'coordinates': geom}
     else:
-        waypts = result['geocoded_waypoints']      
-        obj['properties'] = {'notes': result['status'],
-                             'origin': waypts[0].get('address'),
-                             'dest': waypts[1].get('address')}
         obj['geometry'] = {'type': 'GeometryCollection',
                            'coordinates': []}
+    obj['properties'] = extract_properties(result)
     return obj
 
 
@@ -196,12 +211,12 @@ def write_geojson(geojson, out_path):
     print('Wrote to {}'.format(out_path))
 
 
-def convert_to_geojson(json_file, geo_out_path):
+def convert_to_geojson(result_file, geo_out_path):
     """
     Load a JSON of Google Directions API results,
     convert it to a geojson, and write it to file.
     """
-    data = load_data(json_file)
+    data = load_data(result_file)
     print(len(data))
     geoj = gen_geojson(data)
 
@@ -209,29 +224,64 @@ def convert_to_geojson(json_file, geo_out_path):
     for f in geoj['features']:
         dep_time = f.get('properties', {}).get('departure_time', '')
         if 'am' in geo_out_path and 'pm' in str(dep_time):
-            f['properties']['notes'].append('PM Departure')
+            f['properties']['notes'] += 'PM Departure'
     write_geojson(geoj, geo_out_path)
 
 
-def gen_json(json_file, out_path, write_file=True):
+def gen_json(result_file, out_path, write_file=True):
     """
     Given a json file of Directions API results, 
     produce a json dataset for analysis, and write it to file.
     """
-    data = load_data(json_file)
-    geoj = gen_geojson(data)
-    j = []
-    for f in geoj['features']:
-        j.append(f['properties'])
-        dep_time = f.get('properties', {}).get('departure_time', '')
-        if 'am' in out_path and 'pm' in str(dep_time):
-            f['properties']['notes'].append('PM Departure')
-
+    data = load_data(result_file)
+    records = []
+    for journey in data:
+        record = extract_properties(journey)
+        dep_time = record.get('departure_time', '')
+        if '_am_' in out_path and 'pm' in str(dep_time):
+            record['notes'] += 'PM Departure'
+        records.append(record)
+    
     if write_file:
         with open(out_path, 'w') as outfile:
-            json.dump(j, outfile)
+            json.dump(records, outfile)
             print('Wrote to {}'.format(out_path))
-    return j
 
-convert_to_geojson(trip_path, geojson_out_path)
-gen_json(trip_path, json_out_path)
+    return records
+
+
+def convert_json_to_csv(json_path):
+    csv_path = json_path[:-5] + '.csv'
+    print(csv_path)
+    data = pd.read_json(json_path)
+    data.to_csv(csv_path, index=False)
+
+
+def main():
+    schools = ['498_new_horizon_oci_l_wood_ps',
+               '501_hl_harshman_middle_school',
+               '510_kipp_indy_ms',
+               '523_northwest_middle_school_newcomer',
+               '710_kipp_high_school',
+               '714_shortridge_high_school',
+               '716_arsenal_tech_high_school_graduation_academy',
+               '718_crispus_attucks_magnet',
+               '721_george_washington',
+               '952_blind_school',
+               '958_deaf_school'
+               ]
+    
+    for school in schools:
+        trip_path = 'temp/indy/{}_{}_journeys.json'.format(school, ampm)
+        #geojson_out_path = 'outputs/indy/{}_{}_journeys.geojson'.format(school, ampm)
+        #convert_to_geojson(trip_path, geojson_out_path)
+        json_out_path = 'outputs/indy/{}_{}_journey_attributes.json'.format(school, ampm)
+        csv_out_path = 'outputs/indy/{}_{}_journey_attributes.csv'.format(school, ampm)
+        j = gen_json(trip_path, json_out_path, write_file=False)
+        jdf = pd.DataFrame.from_dict(j)
+        jdf.to_csv(csv_out_path, index=False)
+        print('Wrote to {}'.format(csv_out_path))
+
+
+if __name__ == '__main__':
+    main()

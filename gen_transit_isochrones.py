@@ -3,30 +3,37 @@ import os
 import requests
 import pandas as pd
 
-school_list = 'outputs/geocoded_schools.csv'
+# MODIFY THESE FOR BATCH PROCESSING
+school_list = 'outputs/geocoded_indy_schools.csv'
+router = 'indy2'
 
 # variables to run single process
 school = '31.7704619,-106.4687935'
 city = 'elpaso'
-triptime = '3:30pm'
+triptime = '7:30am'
 ampm = triptime[-2:]
-file_name = 'outputs/{}/isos_{}_may12.geojson'.format(city, triptime.replace(':', ''))
+file_name = 'outputs/{}/isos_{}.geojson'.format(city, triptime.replace(':', ''))
 
 
 def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90], 
-              ampm='am', test_mode=True):
+              maxwalkdist=None, ampm='am', test_mode=True):
     """
-    Makes a call to a running OpenTripPlanner instance for walking isochrones.
+    Makes a call to a running OpenTripPlanner instance for transit isochrones.
+    More parameters are available than are included here. 
+    See http://dev.opentripplanner.org/apidoc/1.4.0/resource_LIsochrone.html for all options.
     
     Args:
         coords (str): Coordinate pair to generate isochrone from, in lat, lon format.
         city (str): Name of the city/router for OTP use. 
-            Assumes an OTP instance is running locally with the given city name.
+            Assumes an OTP instance is running locally on port 8080 (the OTP default) with the given city name.
         triptime (str): Time to pass to API. Expected format examples: '7:30am', '4:00pm'.
-            If arriveBy is not set, this will be the departure time.
+            For PM trips this value will be used as the departure time.
+            For AM trips this value will be used as the arrive by time.
         cutoffs (int or list of ints): Isochrone cutoff values in minutes.
             To generate isochrones for several time cutoffs, pass a list.
             Defaults to [30, 45, 60, 75, 90].
+        maxwalkdist (float): Maximum allowable walking distance, in miles. 
+            Defaults to None -- no limit on walk distance will be imposed.
         ampm (str): Whether to query for AM or PM trips. 
             Accepted values: ('am', 'pm').
         test_mode (bool): Whether to call the function in test mode. 
@@ -34,7 +41,8 @@ def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90],
             Defaults to True.
 
     Returns:
-        json: JSON isochrone results.
+        (if test_mode == False)
+            json: JSON isochrone results.
         (if test_mode == True)
             str: fully-formed API URL.
             params: parameters passed to OpenTripPlanner.
@@ -42,23 +50,37 @@ def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90],
     api = 'http://localhost:8080/otp/routers/{}/isochrone'.format(city)
     header = {'Accept' : 'application/json'}
     cutoffs = [i * 60 for i in cutoffs]
+
+    # PARAMETERS TO PASS TO OTP
     params = {
         'fromPlace': coords,
         'mode': 'WALK,TRANSIT',
-        'date': '05-12-2020',
+        'date': '06-17-2020',
         'time': triptime,
         'cutoffSec': cutoffs,
         'clampInitialWait': 900,
         'maxTransfers': 1
     }
+
+    if maxwalkdist:
+        # convert miles to meters for OTP
+        params['maxWalkDistance'] = maxwalkdist * 1609.34
+
+    # add additional parameters for AM trips
     if ampm == 'am':
         params['toPlace'] = coords
         params['arriveBy'] = True
+        # Indianapolis uses different AM and PM acceptable arrival intervals
+        params['clampInitialWait'] = 1200
+
+    # add additional parameters for PM trips
     elif ampm == 'pm':
         params['arriveBy'] = False
 
     # debugging mode: return api endpoint and params    
     if test_mode:
+        print(api)
+        print(params)
         return api, params
 
     # request mode    
@@ -67,16 +89,39 @@ def query_otp(coords, city, triptime, cutoffs=[30, 45, 60, 75, 90],
         return r.json()
 
 
-def batch_process(city='houston'):
-    """temporary home for houston batch code"""
-    all_schools = pd.read_csv(school_list)
-    # get only schools in the city that have session times
-    all_schools = all_schools[all_schools['tz'].notnull()]
-    city_schools = all_schools[all_schools['address'].str.contains(city, case=False)]
+def batch_process(locations, city='indy2'):
+    """
+    Process several school locations using the same OpenTripPlanner router.
+    Function will create an AM isochrone and PM isochrone file for each school.
+    Files will be saved
+    
+    Args:
+        locations (str): path to csv for locations to use.
+            Function will process all records with an am_latest_arr time.
+            Assumes the locations file has the following fields:
+              am_latest_arr
+              pm_earliest_dep
+              school_lat
+              school_lon
+              campus: school name
+        city (str): name of the OpenTripPlanner router to use.
 
-    for idx, row in city_schools.iterrows():
+    Returns:
+        None
+    
+    """
+    all_schools = pd.read_csv(locations)
+    # get only schools that have session times
+    all_schools = all_schools[all_schools['am_latest_arr'].notnull()]
+
+    for idx, row in all_schools.iterrows():
         # make a school-specific directory
-        school_name = row['campus'].replace(' ', '_').lower()
+        school_name = row['school_name'].replace(' ', '_')\
+                                        .replace('@', 'at')\
+                                        .replace('.', '')\
+                                        .replace('/', '_')\
+                                        .replace('\\', '_')\
+                                        .lower()
         os.makedirs('outputs/{}/{}'.format(city, school_name), exist_ok=True)
 
         # get details for API call
@@ -85,17 +130,12 @@ def batch_process(city='houston'):
         am_time = row['am_latest_arr'].replace(' ', '').lower()
         pm_time = row['pm_earliest_dep'].replace(' ', '').lower()
 
-        # adjust am time by 5 minutes
-        #am_min = row['am_earliest_arr'][2:4]
-        #am_replacement_min = str(int(am_min) + 10).rjust(2, '0')
-        #am_time = am_time.replace(am_min, am_replacement_min)
-
         # format output paths
-        am_out_file = '''outputs/{}/{}/isos_{}_may12_15minclamp.geojson'''.format(city, 
+        am_out_file = '''outputs/{}/{}/isos_{}_jun17.geojson'''.format(city, 
                                                                 school_name, 
                                                                 am_time.replace(':', ''))
         
-        pm_out_file = '''outputs/{}/{}/isos_{}_may12_15minclamp.geojson'''.format(city, 
+        pm_out_file = '''outputs/{}/{}/isos_{}_jun17.geojson'''.format(city, 
                                                                 school_name, 
                                                                 pm_time.replace(':', ''))
         
@@ -104,8 +144,9 @@ def batch_process(city='houston'):
                        city=city, 
                        triptime=am_time, 
                        ampm='am',
+                       maxwalkdist=1.5,
                        test_mode=False)
-        am['name'] = 'AM Isochrones'
+        am['name'] = '{}_am_isochrones'.format(school_name)
         for f in am['features']:
             f['properties']['time'] = f['properties']['time']/60
         with open(am_out_file, 'w') as am_out:
@@ -116,8 +157,9 @@ def batch_process(city='houston'):
                        city=city, 
                        triptime=pm_time, 
                        ampm='pm',
+                       maxwalkdist=1.5,
                        test_mode=False)
-        pm['name'] = 'PM Isochrones'
+        pm['name'] = '{}_pm_isochrones'.format(school_name)
         for f in pm['features']:
             f['properties']['time'] = f['properties']['time']/60
         with open(pm_out_file, 'w') as pm_out:
@@ -132,10 +174,13 @@ def single_process():
                     triptime=triptime, 
                     cutoffs=[30, 45, 60, 75, 90],
                     ampm=ampm,
+                    maxwalkdist=2,
                     test_mode=False)
 
     with open(file_name, 'w') as out:
         json.dump(ans, out)
         print('Wrote file {}'.format(file_name))
 
-batch_process()
+
+batch_process(school_list, router)
+#single_process()
