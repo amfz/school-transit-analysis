@@ -104,7 +104,7 @@ def process_indy_students():
         school_code = list(df['stu_sch_code'].unique())[0]
         school_name = clean_school_name(str(school_name))
         print(school_name)
-        file_name = 'temp/indy/hs_walking/{}_{}_geocoded_students.csv'.format(school_code, school_name)
+        file_name = 'temp/indy/{}_{}_geocoded_students.csv'.format(school_code, school_name)
         df.to_csv(file_name, index=False)
 
     print('done')

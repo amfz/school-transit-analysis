@@ -6,7 +6,7 @@ import polyline
 school = ''  # see schools list in main()
 ampm = 'pm'
 
-# path templates -- commented out because these are now generated in main()
+#path templates -- commented out because these are now generated in main()
 #trip_path = 'temp/indy/{}_{}_journeys.json'.format(school, ampm)
 #geojson_out_path = 'outputs/indy/{}_{}_journeys.geojson'.format(school, ampm)
 #json_out_path = 'outputs/indy/{}_{}_journey_attributes.json'.format(school, ampm)
@@ -184,12 +184,6 @@ def gen_geojson(data):
     out_geojson = {
         "type": "FeatureCollection",
         "name": "trips",
-        "crs": {
-            "type": "name",
-            "properties": {
-                "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
-            }
-        },
         "features": []
     }
     for journey in data:
@@ -228,7 +222,7 @@ def convert_to_geojson(result_file, geo_out_path):
     write_geojson(geoj, geo_out_path)
 
 
-def gen_json(result_file, out_path, write_file=True):
+def gen_json(result_file, out_path='', write_file=False):
     """
     Given a json file of Directions API results, 
     produce a json dataset for analysis, and write it to file.
@@ -258,26 +252,19 @@ def convert_json_to_csv(json_path):
 
 
 def main():
-    schools = ['498_new_horizon_oci_l_wood_ps',
-               '501_hl_harshman_middle_school',
-               '510_kipp_indy_ms',
-               '523_northwest_middle_school_newcomer',
-               '710_kipp_high_school',
-               '714_shortridge_high_school',
-               '716_arsenal_tech_high_school_graduation_academy',
-               '718_crispus_attucks_magnet',
-               '721_george_washington',
-               '952_blind_school',
-               '958_deaf_school'
-               ]
+    schools = ['000_example_school',
+               '999_school_two'
+              ]
     
     for school in schools:
         trip_path = 'temp/indy/{}_{}_journeys.json'.format(school, ampm)
+
+        # uncomment to get geojson files
         #geojson_out_path = 'outputs/indy/{}_{}_journeys.geojson'.format(school, ampm)
         #convert_to_geojson(trip_path, geojson_out_path)
-        json_out_path = 'outputs/indy/{}_{}_journey_attributes.json'.format(school, ampm)
+
         csv_out_path = 'outputs/indy/{}_{}_journey_attributes.csv'.format(school, ampm)
-        j = gen_json(trip_path, json_out_path, write_file=False)
+        j = gen_json(trip_path, write_file=False)
         jdf = pd.DataFrame.from_dict(j)
         jdf.to_csv(csv_out_path, index=False)
         print('Wrote to {}'.format(csv_out_path))

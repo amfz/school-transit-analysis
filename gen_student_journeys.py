@@ -7,7 +7,7 @@ import convert_times
 from datetime import datetime
 
 # variables
-school = '498_new_horizon_oci_l_wood_ps'
+school = '000_school_name'
 ampm = 'am'
 
 # path templates
